@@ -16,7 +16,7 @@
 import logging
 import random
 import sys
-
+import os
 import torch
 import transformers
 from transformers import AutoModelForCausalLM, set_seed
@@ -97,6 +97,18 @@ def main():
     #####################
     # Apply chat template
     #####################
+    model_type = os.environ.get('MODEL_TYPE', None)
+
+    if model_type == "Swallow" : 
+        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set loop_messages = messages[1:] %}{% set system_message = messages[0]['content'] %}{% elif false == true and not '<<SYS>>' in messages[0]['content'] %}{% set loop_messages = messages %}{% set system_message = 'あなたは誠実で優秀な日本人のアシスタントです。' %}{% else %}{% set loop_messages = messages %}{% set system_message = false %}{% endif %}{{ bos_token }}{% for message in loop_messages %}{% if loop.index0 == 0 and system_message != false %}{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}{% else %}{% set content = message['content'] %}{% endif %}{% if message['role'] == 'user' %}{{ '[INST] ' + content.strip() + ' [/INST] ' }}{% elif message['role'] == 'system' %}{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}{% elif message['role'] == 'assistant' %}{{ ''  + content.strip() + '' + eos_token }}{% endif %}{% endfor %}" 
+        
+        def remove_s_token(batch):
+            if 'chosen' in batch and isinstance(batch['chosen'], list):
+                batch['chosen'] = [text[3:] if isinstance(text, str) and text.startswith("<s>") else text for text in batch['chosen']]
+            if 'rejected' in batch and isinstance(batch['rejected'], list):
+                batch['rejected'] = [text[3:] if isinstance(text, str) and text.startswith("<s>") else text for text in batch['rejected']]
+            return batch
+
     raw_datasets = raw_datasets.map(
         apply_chat_template,
         fn_kwargs={
@@ -131,6 +143,9 @@ def main():
         raw_datasets[split] = raw_datasets[split].rename_columns(
             {"text_prompt": "prompt", "text_chosen": "chosen", "text_rejected": "rejected"}
         )
+    if model_type == "Swallow" : 
+        for split in ["train", "test"]:
+            raw_datasets[split] = raw_datasets[split].map(remove_s_token, batched=True)
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(raw_datasets["train"])), 3):
@@ -146,7 +161,7 @@ def main():
     model_kwargs = dict(
         revision=model_args.model_revision,
         trust_remote_code=model_args.trust_remote_code,
-        use_flash_attention_2=model_args.use_flash_attention_2,
+        attn_implementation="flash_attention_2",
         torch_dtype=torch_dtype,
         use_cache=False if training_args.gradient_checkpointing else True,
         device_map=get_kbit_device_map() if quantization_config is not None else None,
@@ -160,7 +175,7 @@ def main():
         model_kwargs = dict(
             revision=model_args.base_model_revision,
             trust_remote_code=model_args.trust_remote_code,
-            use_flash_attention_2=model_args.use_flash_attention_2,
+            attn_implementation="flash_attention_2",
             torch_dtype=torch_dtype,
             use_cache=False if training_args.gradient_checkpointing else True,
             device_map=get_kbit_device_map() if quantization_config is not None else None,
@@ -201,6 +216,7 @@ def main():
         max_prompt_length=training_args.max_prompt_length,
         peft_config=get_peft_config(model_args),
         loss_type=training_args.loss_type,
+        generate_during_eval=True,
     )
 
     ###############

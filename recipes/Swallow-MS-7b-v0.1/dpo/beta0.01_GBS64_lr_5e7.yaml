@@ -1,0 +1,40 @@
+# Model arguments
+model_name_or_path: tokyotech-llm/Swallow-7b-VE-instruct-v1.0-baseline-lr_2e-5-minlr_2e-6-GB256-ITER2000-iter0002000
+torch_dtype: bfloat16
+
+# Data training arguments
+# For definitions, see: src/h4/training/config.py
+dataset_mixer:
+  tokyotech-llm/swallow-dpo: 1.0
+dataset_splits:
+- train
+- test
+preprocessing_num_workers: 12
+
+# DPOTrainer arguments
+bf16: true
+beta: 0.01
+do_eval: true
+evaluation_strategy: steps
+eval_steps: 177
+gradient_accumulation_steps: 8
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: False
+learning_rate: 5.0e-7
+log_level: info
+logging_steps: 1
+lr_scheduler_type: cosine
+max_length: 4096
+max_prompt_length: 2048
+num_train_epochs: 3
+optim: adamw_torch
+output_dir: /mnt/nvme0n1/taishi/checkpoint/Swallow-MS-7b-v0.1/dpo/beta0.01_GBS64_lr_5e7
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+push_to_hub: False
+save_strategy: "steps"
+save_steps: 177
+save_total_limit: 5
+seed: 42
+warmup_ratio: 0.1
